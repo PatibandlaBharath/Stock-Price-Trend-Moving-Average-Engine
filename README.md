@@ -1,7 +1,7 @@
 # Stock-Price-Trend-Moving-Average-Engine
-# 📈 Stock Market Trends — SQL Analytics Project
+# 📈 Stock Market Trends — SQL Analytics 
 
-A complete **PostgreSQL analytics project** that models real-world stock market data across companies, sectors, and trading history — with advanced SQL techniques including window functions, moving averages, volatility analysis, and signal detection.
+> A complete **PostgreSQL analytics project** modelling real-world stock market data across companies, sectors, and 365 days of trading history — featuring window functions, moving averages, trading signals, volatility analysis, and performance rankings.
 
 ---
 
@@ -10,84 +10,106 @@ A complete **PostgreSQL analytics project** that models real-world stock market 
 ```
 stock-market-trends/
 ├── schema/
-│   ├── sectors.sql          # Sector reference table
-│   ├── companies.sql        # Company master data
-│   └── stock_prices.sql     # Daily OHLCV price records
+│   ├── sectors.sql            # Sector reference table
+│   ├── companies.sql          # Company master data
+│   └── stock_prices.sql       # Daily OHLCV price records
 ├── seed/
-│   └── seed_data.sql        # 365 days × 8 companies synthetic data
+│   └── seed_data.sql          # 2,920 synthetic price rows
 ├── analytics/
-│   ├── basic_stats.sql      # Avg / High / Low price queries
-│   ├── moving_averages.sql  # 7-day and 30-day MAs
-│   ├── volatility.sql       # STDDEV-based volatility ranking
-│   ├── daily_diff.sql       # LAG-based daily price difference
-│   ├── signals.sql          # Golden Cross & Death Cross detection
-│   └── sector_analysis.sql  # Sector-wise aggregations
+│   ├── basic_stats.sql        # AVG / MAX / MIN price queries
+│   ├── moving_averages.sql    # 7-day and 30-day MAs
+│   ├── yearly_performance.sql # EXTRACT(YEAR) aggregation
+│   ├── volatility.sql         # STDDEV-based volatility ranking
+│   ├── daily_diff.sql         # LAG-based daily price difference
+│   ├── signals.sql            # Golden Cross & Death Cross (CTE)
+│   ├── sector_analysis.sql    # Sector-wise average prices
+│   ├── top_performers.sql     # Top & bottom closing prices
+│   ├── gainers_losers.sql     # Top gainers and top losers
+│   ├── rankings.sql           # RANK() window function
+│   ├── max_volume_day.sql     # DISTINCT ON max volume per company
+│   └── stable_stocks.sql      # Most stable (lowest volatility)
 ├── views/
-│   └── stock_report.sql     # Reporting view
+│   └── stock_report.sql       # Reporting view
 └── indexes/
-    └── optimizations.sql    # Performance index on trade_date
+    └── optimizations.sql      # idx_trade_date performance index
 ```
 
 ---
 
 ## 🗄️ Database Schema
 
-### Entity Relationship Overview
+### Entity Relationship
 
 ```
 sectors (sector_id PK, sector_name)
     │
-    └──< companies (company_id PK, company_name, stock_symbol, sector_id FK, market_cap)
+    └──< companies (company_id PK, company_name, stock_symbol UNIQUE,
+    │               sector_id FK, market_cap)
               │
-              └──< stock_prices (price_id PK, company_id FK, trade_date,
+              └──< stock_prices (price_id PK, company_id FK, trade_date ← indexed,
                                   open_price, high_price, low_price, close_price, volume)
 ```
 
-### Tables
+### Table: `sectors`
 
-#### `sectors`
 | Column | Type | Description |
 |---|---|---|
 | `sector_id` | SERIAL PK | Auto-increment primary key |
-| `sector_name` | VARCHAR(100) | Sector label (e.g. Technology, Banking) |
+| `sector_name` | VARCHAR(100) NOT NULL | Sector label |
 
-#### `companies`
+### Table: `companies`
+
 | Column | Type | Description |
 |---|---|---|
 | `company_id` | SERIAL PK | Auto-increment primary key |
-| `company_name` | VARCHAR(100) | Full company name |
-| `stock_symbol` | VARCHAR(10) UNIQUE | Ticker (e.g. AAPL, TSLA) |
-| `sector_id` | INT FK | References `sectors` |
+| `company_name` | VARCHAR(100) NOT NULL | Full company name |
+| `stock_symbol` | VARCHAR(10) UNIQUE | Exchange ticker (e.g. AAPL) |
+| `sector_id` | INT FK → sectors | References sectors table |
 | `market_cap` | BIGINT | Market capitalisation in USD |
 
-#### `stock_prices`
+### Table: `stock_prices`
+
 | Column | Type | Description |
 |---|---|---|
 | `price_id` | SERIAL PK | Auto-increment primary key |
-| `company_id` | INT FK | References `companies` |
-| `trade_date` | DATE | Date of trading session |
+| `company_id` | INT FK → companies | References companies table |
+| `trade_date` | DATE | Trading session date (indexed) |
 | `open_price` | NUMERIC(10,2) | Opening price |
 | `high_price` | NUMERIC(10,2) | Intraday high |
 | `low_price` | NUMERIC(10,2) | Intraday low |
 | `close_price` | NUMERIC(10,2) | Closing price |
-| `volume` | BIGINT | Number of shares traded |
+| `volume` | BIGINT | Shares traded |
 
 ---
 
 ## 🏢 Seed Data
 
-**5 Sectors** and **8 Companies** are seeded, with **365 days × 8 companies = 2,920 price records** generated using `generate_series` and `random()`.
+**5 sectors · 8 companies · 2,920 price records** (365 days × 8 companies via `generate_series` + `CROSS JOIN`)
 
 | Company | Symbol | Sector | Market Cap |
 |---|---|---|---|
-| Apple Inc | AAPL | Technology | $3.0B |
-| Microsoft | MSFT | Technology | $2.8B |
-| Tesla | TSLA | Automobile | $1.2B |
-| JP Morgan | JPM | Banking | $900M |
-| Infosys | INFY | Technology | $700M |
-| Reliance | RELI | Energy | $1.5B |
-| TCS | TCS | Technology | $1.3B |
-| HDFC Bank | HDFC | Banking | $1.0B |
+| Apple Inc | AAPL | Technology | $3.0 B |
+| Microsoft | MSFT | Technology | $2.8 B |
+| Tesla | TSLA | Automobile | $1.2 B |
+| JP Morgan | JPM | Banking | $900 M |
+| Infosys | INFY | Technology | $700 M |
+| Reliance | RELI | Energy | $1.5 B |
+| TCS | TCS | Technology | $1.3 B |
+| HDFC Bank | HDFC | Banking | $1.0 B |
+
+```sql
+INSERT INTO stock_prices (company_id, trade_date, open_price, high_price, low_price, close_price, volume)
+SELECT
+    c.company_id,
+    CURRENT_DATE - gs.day,
+    ROUND((100 + random()*50)::numeric, 2),   -- open:  100-150
+    ROUND((150 + random()*50)::numeric, 2),   -- high:  150-200
+    ROUND((90  + random()*40)::numeric, 2),   -- low:    90-130
+    ROUND((100 + random()*60)::numeric, 2),   -- close: 100-160
+    (100000 + random()*500000)::BIGINT        -- volume
+FROM companies c
+CROSS JOIN generate_series(1, 365) AS gs(day);
+```
 
 ---
 
@@ -96,20 +118,17 @@ sectors (sector_id PK, sector_name)
 ### 1. Basic Statistics
 
 ```sql
--- Average closing price per company
+-- Average closing price
 SELECT company_id, ROUND(AVG(close_price), 2) AS avg_close_price
-FROM stock_prices
-GROUP BY company_id;
+FROM stock_prices GROUP BY company_id;
 
 -- Highest intraday price
 SELECT company_id, MAX(high_price) AS highest_price
-FROM stock_prices
-GROUP BY company_id;
+FROM stock_prices GROUP BY company_id;
 
 -- Lowest intraday price
 SELECT company_id, MIN(low_price) AS lowest_price
-FROM stock_prices
-GROUP BY company_id;
+FROM stock_prices GROUP BY company_id;
 ```
 
 ---
@@ -120,8 +139,7 @@ GROUP BY company_id;
 -- 7-Day Moving Average
 SELECT company_id, trade_date, close_price,
   ROUND(AVG(close_price) OVER (
-    PARTITION BY company_id
-    ORDER BY trade_date
+    PARTITION BY company_id ORDER BY trade_date
     ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
   ), 2) AS moving_avg_7d
 FROM stock_prices;
@@ -129,8 +147,7 @@ FROM stock_prices;
 -- 30-Day Moving Average
 SELECT company_id, trade_date, close_price,
   ROUND(AVG(close_price) OVER (
-    PARTITION BY company_id
-    ORDER BY trade_date
+    PARTITION BY company_id ORDER BY trade_date
     ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
   ), 2) AS moving_avg_30d
 FROM stock_prices;
@@ -138,10 +155,21 @@ FROM stock_prices;
 
 ---
 
-### 3. Volatility Analysis
+### 3. Yearly Performance
 
 ```sql
--- Rank companies by price volatility (higher STDDEV = more volatile)
+SELECT company_id,
+  EXTRACT(YEAR FROM trade_date) AS year,
+  ROUND(AVG(close_price), 2) AS yearly_avg
+FROM stock_prices
+GROUP BY company_id, year;
+```
+
+---
+
+### 4. Volatility Analysis
+
+```sql
 SELECT company_id,
   ROUND(STDDEV(close_price)::numeric, 2) AS volatility
 FROM stock_prices
@@ -151,10 +179,9 @@ ORDER BY volatility DESC;
 
 ---
 
-### 4. Daily Price Difference (LAG)
+### 5. Daily Price Difference (LAG)
 
 ```sql
--- Compare today's close to yesterday's close
 SELECT company_id, trade_date, close_price,
   LAG(close_price) OVER (PARTITION BY company_id ORDER BY trade_date) AS previous_close,
   close_price - LAG(close_price) OVER (PARTITION BY company_id ORDER BY trade_date) AS daily_difference
@@ -163,10 +190,10 @@ FROM stock_prices;
 
 ---
 
-### 5. Trading Signals — Golden Cross & Death Cross
+### 6. Trading Signals — Golden Cross & Death Cross
 
-> A **Golden Cross** occurs when the 50-day MA crosses above the 200-day MA — a bullish signal.  
-> A **Death Cross** occurs when the 50-day MA drops below the 200-day MA — a bearish signal.
+> **Golden Cross**: MA-50 > MA-200 → Bullish signal
+> **Death Cross**: MA-50 < MA-200 → Bearish signal
 
 ```sql
 WITH ma_data AS (
@@ -181,29 +208,26 @@ WITH ma_data AS (
     ) AS ma_200
   FROM stock_prices
 )
--- Golden Cross: bullish
-SELECT * FROM ma_data WHERE ma_50 > ma_200;
-
--- Death Cross: bearish
-SELECT * FROM ma_data WHERE ma_50 < ma_200;
+SELECT * FROM ma_data WHERE ma_50 > ma_200;  -- Golden Cross (bullish)
+SELECT * FROM ma_data WHERE ma_50 < ma_200;  -- Death Cross  (bearish)
 ```
 
 ---
 
-### 6. Sector-Wise Analysis
+### 7. Sector-Wise Analysis
 
 ```sql
 SELECT s.sector_name,
   ROUND(AVG(sp.close_price), 2) AS avg_sector_price
 FROM stock_prices sp
 JOIN companies c ON sp.company_id = c.company_id
-JOIN sectors s ON c.sector_id = s.sector_id
+JOIN sectors s   ON c.sector_id   = s.sector_id
 GROUP BY s.sector_name;
 ```
 
 ---
 
-### 7. Top Performing Stocks
+### 8. Top Performing Stocks
 
 ```sql
 SELECT c.company_name,
@@ -216,7 +240,7 @@ ORDER BY average_price DESC;
 
 ---
 
-### 8. Highest Trading Volume
+### 9. Highest Trading Volume
 
 ```sql
 SELECT c.company_name, MAX(sp.volume) AS highest_volume
@@ -228,65 +252,99 @@ ORDER BY highest_volume DESC;
 
 ---
 
+### 10. Top 5 Highest & Lowest Closing Prices
+
+```sql
+-- Top 5 highest
+SELECT c.company_name, sp.trade_date, sp.close_price
+FROM stock_prices sp JOIN companies c ON sp.company_id = c.company_id
+ORDER BY sp.close_price DESC LIMIT 5;
+
+-- Bottom 5 lowest
+SELECT c.company_name, sp.trade_date, sp.close_price
+FROM stock_prices sp JOIN companies c ON sp.company_id = c.company_id
+ORDER BY sp.close_price ASC LIMIT 5;
+```
+
+---
+
+### 11. Top Gainers & Top Losers
+
+```sql
+-- Top 10 single-day gainers
+SELECT company_id, trade_date,
+  close_price - LAG(close_price) OVER (PARTITION BY company_id ORDER BY trade_date) AS gain
+FROM stock_prices ORDER BY gain DESC LIMIT 10;
+
+-- Top 10 single-day losers
+SELECT company_id, trade_date,
+  close_price - LAG(close_price) OVER (PARTITION BY company_id ORDER BY trade_date) AS loss
+FROM stock_prices ORDER BY loss ASC LIMIT 10;
+```
+
+---
+
+### 12. Stock Rankings (RANK Window Function)
+
+```sql
+SELECT c.company_name,
+  ROUND(AVG(sp.close_price), 2) AS avg_price,
+  RANK() OVER (ORDER BY AVG(sp.close_price) DESC) AS stock_rank
+FROM stock_prices sp
+JOIN companies c ON sp.company_id = c.company_id
+GROUP BY c.company_name;
+```
+
+---
+
+### 13. Company-wise Maximum Volume Day
+
+```sql
+SELECT DISTINCT ON (company_id)
+  company_id, trade_date, volume
+FROM stock_prices
+ORDER BY company_id, volume DESC;
+```
+
+---
+
+### 14. Most Stable Stocks (Lowest Volatility)
+
+```sql
+SELECT c.company_name,
+  ROUND(STDDEV(sp.close_price)::numeric, 2) AS volatility
+FROM stock_prices sp
+JOIN companies c ON sp.company_id = c.company_id
+GROUP BY c.company_name
+ORDER BY volatility ASC;
+```
+
+---
+
 ## 👁️ Reporting View
 
 ```sql
 CREATE VIEW stock_report AS
 SELECT c.company_name, c.stock_symbol,
-  sp.trade_date, sp.close_price, sp.volume
+       sp.trade_date, sp.close_price, sp.volume
 FROM stock_prices sp
 JOIN companies c ON sp.company_id = c.company_id;
 
-SELECT * FROM stock_report;
+SELECT * FROM stock_report WHERE stock_symbol = 'AAPL' ORDER BY trade_date DESC;
 ```
-
-Use this view in dashboards, reports, or BI tools without re-writing joins.
 
 ---
 
 ## ⚡ Index Optimization
 
 ```sql
--- Speed up date-range queries significantly
 CREATE INDEX idx_trade_date ON stock_prices(trade_date);
 
--- Verify index was created
+-- Verify
 SELECT * FROM pg_indexes WHERE tablename = 'stock_prices';
 ```
 
-The index on `trade_date` is critical for time-series queries, moving average windows, and any `WHERE trade_date BETWEEN ...` filters.
-
----
-
-## 🛠️ Setup & Usage
-
-### Prerequisites
-- PostgreSQL 13+
-- `psql` CLI or any SQL client (DBeaver, pgAdmin, TablePlus)
-
-### Run the Project
-
-```bash
-# 1. Connect to your PostgreSQL instance
-psql -U your_username -d your_database
-
-# 2. Create schema
-\i schema/sectors.sql
-\i schema/companies.sql
-\i schema/stock_prices.sql
-
-# 3. Seed data
-\i seed/seed_data.sql
-
-# 4. Run analytics
-\i analytics/basic_stats.sql
-\i analytics/moving_averages.sql
-\i analytics/signals.sql
-
-# 5. Create view and index
-\i views/stock_report.sql
-\i indexes/optimizations.sql
-```
+> An index on `trade_date` is critical for time-series queries and `OVER (ORDER BY trade_date)` window frames.
 
 ---
 
@@ -296,75 +354,72 @@ psql -U your_username -d your_database
 |---|---|
 | `SERIAL PRIMARY KEY` | All three tables |
 | `FOREIGN KEY` references | companies → sectors, stock_prices → companies |
+| `UNIQUE` constraint | stock_symbol |
 | `generate_series` + `CROSS JOIN` | Bulk seed data generation |
-| `AVG() OVER (ROWS BETWEEN ...)` | Moving averages (7-day, 30-day, 50-day, 200-day) |
-| `LAG()` window function | Daily price difference |
-| `STDDEV()` aggregate | Volatility analysis |
-| `CTE (WITH ...)` | Golden Cross / Death Cross |
+| `AVG() OVER (ROWS BETWEEN …)` | 7-day, 30-day, 50-day, 200-day moving averages |
+| `LAG()` window function | Daily difference, gainers/losers |
+| `RANK() OVER (ORDER BY …)` | Stock price rankings |
+| `STDDEV()` aggregate | Volatility, most stable stocks |
+| `EXTRACT(YEAR FROM …)` | Yearly performance |
+| `CTE (WITH … AS)` | Golden Cross / Death Cross detection |
+| `DISTINCT ON` | Max volume day per company |
 | Multi-table `JOIN` | Sector analysis, top stocks, volume |
+| `LIMIT` | Top 5 prices, top 10 gainers/losers |
 | `CREATE VIEW` | Reusable reporting layer |
-| `CREATE INDEX` | Query performance optimization |
+| `CREATE INDEX` | Query performance on trade_date |
 | `pg_indexes` system catalog | Index introspection |
 
 ---
 
-## 📊 Sample Output Snapshots
+## 🛠️ Setup & Usage
 
-**Volatility Ranking (sample)**
-```
-company_id | volatility
------------+-----------
-         3 |      17.43   ← Tesla (most volatile)
-         1 |      17.31
-         7 |      17.28
-         2 |      17.24
-         5 |      17.18
-         8 |      17.07
-         6 |      17.02
-         4 |      16.89   ← JP Morgan (least volatile)
-```
+### Prerequisites
+- PostgreSQL 13+
+- `psql` CLI or GUI client (DBeaver, pgAdmin, TablePlus)
 
-**Moving Average (sample)**
-```
-company_id | trade_date | close_price | moving_avg_7d | moving_avg_30d
------------+------------+-------------+---------------+---------------
-         1 | 2024-01-01 |      134.50 |        128.40 |         125.20
-         1 | 2024-01-02 |      141.20 |        130.10 |         126.80
+### Run the Project
+
+```bash
+# 1. Create and connect to database
+psql -U your_username
+CREATE DATABASE stock_market;
+\c stock_market
+
+# 2. Create schema
+\i schema/create_tables.sql
+
+# 3. Seed data
+\i seed/seed_data.sql
+
+# 4. Run analytics
+\i analytics/moving_averages.sql
+\i analytics/signals.sql
+\i analytics/rankings.sql
+
+# 5. Create view and index
+\i views/stock_report.sql
+\i indexes/optimizations.sql
 ```
 
 ---
 
-## 🐛 Known Issues / Fixes
+## 🐛 Known Issue
 
-One syntax error exists in the original `basic_stats.sql`:
+One syntax error in the original `basic_stats.sql`:
 
 ```sql
--- ❌ Bug (extra comma and typo)
+-- WRONG (stray token 'com' and missing comma)
 SELECT company_id, com
 MAX(high_price) AS highest_price
+FROM stock_prices GROUP BY company_id;
 
--- ✅ Fix
+-- CORRECT
 SELECT company_id,
 MAX(high_price) AS highest_price
+FROM stock_prices GROUP BY company_id;
 ```
 
 ---
 
-## 🚀 Future Enhancements
 
-- [ ] Add RSI (Relative Strength Index) calculation
-- [ ] Add Bollinger Bands using STDDEV window
-- [ ] Parameterize moving average windows via functions
-- [ ] Add a `dividends` table and yield analysis
-- [ ] Connect to a live data source (e.g. Alpha Vantage API → PostgreSQL)
-- [ ] Build a Grafana or Metabase dashboard on top of `stock_report` view
-
----
-
-## 📄 License
-
-MIT License — free to use, fork, and extend.
-
----
-
-> Built with PostgreSQL · Window Functions · CTEs · Time-Series Analysis
+> Built with **PostgreSQL** · Window Functions · CTEs · Time-Series Analytics · Trading Signal Detection
